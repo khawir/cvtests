@@ -5,62 +5,86 @@ from ultralytics.utils.plotting import save_one_box
 from pathlib import Path
 from collections import defaultdict
 import numpy as np
+import queue
 # from deepface import DeepFace
 
 
 class ThreadedCamera(object):
     def __init__(self, src=0):
         self.capture = cv2.VideoCapture(src)
-        self.capture.set(cv2.CAP_PROP_BUFFERSIZE, 2)
+        self.capture.set(cv2.CAP_PROP_BUFFERSIZE, 3)
         self.width = int(self.capture.get(cv2.CAP_PROP_FRAME_WIDTH))
         self.height = int(self.capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
         self.new_h = 720
         self.ratio = self.new_h/ self.height
         self.new_w = int(self.width * self.ratio)
+
+        self.frame_rate= 20
+        self.queue = queue.Queue(maxsize=40)
+        
         self.track_history = defaultdict(lambda: [])
         self.count_ids = []
         self.roi1 = 600
         self.roi2 = 800
 
        
-        self.FPS = 1/30
+        self.FPS = 1/self.frame_rate
         self.FPS_MS = int(self.FPS * 1000)
-        
+
         # Start frame retrieval thread
-        self.thread = Thread(target=self.update, args=())
+        self.thread = Thread(target=self.update_frame, args=())
         self.thread.daemon = True
         self.thread.start()
-        
+
     def update(self):
         while True:
             if self.capture.isOpened():
                 (self.status, self.frame) = self.capture.read()
-            time.sleep(self.FPS)
+            time.sleep(0.01)
+        
+    def update_frame(self):
+        while True:
+            ret, frame = self.capture.read()
+            if ret:
+                if not self.queue.full():
+                    self.queue.put(frame)
+                else:
+                    try:
+                        self.queue.get_nowait()
+                        self.queue.put(frame)
+                    except queue.Empty:
+                        pass
+            else:
+                time.sleep(0.01)
 
     def show_frame(self):
-        results = model.track(
-            self.frame,
-            persist=True,
-            # max_det = 10,
-            # classes=[0],
-            show=False,
-            conf=0.5,
-            show_labels=False,
-            verbose=False
-        )
+        try:
+            self.frame = self.queue.get_nowait()
+            results = model.track(
+                self.frame,
+                persist=True,
+                # max_det = 10,
+                # classes=[0],
+                show=False,
+                conf=0.5,
+                show_labels=False,
+                verbose=False
+            )
 
-        self.snap_on_in(results[0])
+            self.snap_on_in(results[0])
 
-        r_frame = cv2.resize(self.frame, (self.new_w, self.new_h) )
-        cv2.imshow('frame', r_frame)
-        if cv2.waitKey(self.FPS_MS) & 0xFF == ord('q'):
-            self.capture.release()
-            cv2.destroyAllWindows()
-            exit(1)
+            r_frame = cv2.resize(self.frame, (self.new_w, self.new_h) )
+            cv2.imshow('frame', r_frame)
+            if cv2.waitKey(self.FPS_MS) & 0xFF == ord('q'):
+                self.capture.release()
+                cv2.destroyAllWindows()
+                exit(1)
+        except queue.Empty:
+            pass
 
     def snap_on_in(self, results):
-        self.frame = results.plot()
-        cv2.rectangle(self.frame, (0, self.roi1), (self.width, self.roi2), color=(0, 230, 0), thickness=2)
+        # self.frame = results.plot()
+        # cv2.rectangle(self.frame, (0, self.roi1), (self.width, self.roi2), color=(0, 230, 0), thickness=2)
 
         boxes = results.boxes.xywh.cpu()
         xyxys = results.boxes.xyxy.cpu()
@@ -74,8 +98,8 @@ class ThreadedCamera(object):
             if len(track) > 30:  # retain 90 tracks for 90 frames
                 track.pop(0)
 
-            points = np.hstack(track).astype(np.int32).reshape((-1, 1, 2))
-            cv2.polylines(self.frame, [points], isClosed=False, color=(230, 230, 230), thickness=10)
+            # points = np.hstack(track).astype(np.int32).reshape((-1, 1, 2))
+            # cv2.polylines(self.frame, [points], isClosed=False, color=(230, 230, 230), thickness=10)
 
             y_checked = int(y)
             if y_checked in range(self.roi1, self.roi2):
@@ -95,8 +119,8 @@ class ThreadedCamera(object):
 
 
 # src = 'rtsp://admin:hik@12345@172.23.16.55'
-src = '1.mp4'
-# src = 'https://isgpopen.ezvizlife.com/v3/openlive/AA4823505_1_1.m3u8?expire=1716039080&id=711677256444084224&c=3cffb6de2e&t=e1498a314974763a69bcfa322cfc66b560034821f1069a0ad4701eb74382c53c&ev=100'
+# src = '3.mp4'
+src = 'https://isgpopen.ezvizlife.com/v3/openlive/AA4823505_1_1.m3u8?expire=1716039080&id=711677256444084224&c=3cffb6de2e&t=e1498a314974763a69bcfa322cfc66b560034821f1069a0ad4701eb74382c53c&ev=100'
 model = YOLO('yolov8n.pt')
 
 threaded_camera = ThreadedCamera(src)
