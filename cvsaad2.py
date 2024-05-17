@@ -1,7 +1,9 @@
 from threading import Thread
 import cv2, time
+import torch
 from ultralytics import YOLO
-from ultralytics.solutions import object_counter
+from ultralytics.utils.plotting import save_one_box
+from pathlib import Path
 from collections import defaultdict
 import numpy as np
 # from deepface import DeepFace
@@ -17,16 +19,9 @@ class ThreadedCamera(object):
         self.ratio = self.new_h/ self.height
         self.new_w = int(self.width * self.ratio)
         self.track_history = defaultdict(lambda: [])
-        
-        
-        self.line_points = [(20, 400), (1080, 400)]
-        counter = object_counter.ObjectCounter()
-        counter.set_args(view_img=True,
-                 reg_pts=self.line_points,
-                 classes_names=[0],
-                 draw_tracks=True,
-                 line_thickness=2)
-
+        self.count_ids = []
+        self.roi1 = 600
+        self.roi2 = 800
 
        
         self.FPS = 1/30
@@ -48,55 +43,58 @@ class ThreadedCamera(object):
             self.frame,
             persist=True,
             # max_det = 10,
-            classes=[0],
+            # classes=[0],
             show=False,
             conf=0.5,
+            show_labels=False,
             verbose=False
         )
 
-        # self.snap_on_in(results[0])
-        self.frame = self.counter.start_counting(self.frame, results)
-        print(self.frame)
+        self.snap_on_in(results[0])
 
         r_frame = cv2.resize(self.frame, (self.new_w, self.new_h) )
         cv2.imshow('frame', r_frame)
         cv2.waitKey(self.FPS_MS)
 
     def snap_on_in(self, results):
-        self.frame = results.plot()
+        # self.frame = results.plot()
+        # cv2.rectangle(self.frame, (0, self.roi1), (self.width, self.roi2), color=(0, 230, 0), thickness=2)
 
         boxes = results.boxes.xywh.cpu()
+        xyxys = results.boxes.xyxy.cpu()
         track_ids = results.boxes.id.int().cpu().tolist()
 
-        for box, track_id in zip(boxes, track_ids):
+        for box, track_id, xyxy in zip(boxes, track_ids, xyxys):
             x, y, _, _ = box
-            track_line = self.track_history[track_id]
-            track_line.append((float(x), float(y)))  # x, y center point
-            if len(track_line) > 30:  # retain 90 tracks for 90 frames
-                track_line.pop(0)
 
-            # Draw the tracking lines
-            points = np.hstack(track_line).astype(np.int32).reshape((-1, 1, 2))
-            cv2.polylines(self.frame, [points], isClosed=False, color=(230, 230, 230), thickness=10)
+            track = self.track_history[track_id]
+            track.append((float(x), float(y)))  # x, y center point
+            if len(track) > 30:  # retain 90 tracks for 90 frames
+                track.pop(0)
 
-            # print(f"{track_id} : {points.shape}")
-            # if track_id==3:
-            #     print(f"{track_id} : {y=}")
+            # points = np.hstack(track).astype(np.int32).reshape((-1, 1, 2))
+            # cv2.polylines(self.frame, [points], isClosed=False, color=(230, 230, 230), thickness=10)
+
             y_checked = int(y)
-            if y_checked in range(800,900):
-                # print(f"{track_id} : Crossed @ {time.time()} | {len(track)}")
-                _, y_prev = track_line[len(track_line)-2]
-                print(f"{y} | {y_prev}")
-                if y > y_prev:
-                    print(f"{track_id} : In @ {time.time()}")
-                else:
-                    print(f"{track_id} : Out @ {time.time()}")
+            if y_checked in range(self.roi1, self.roi2):
+                # _, y_prev = track[len(track)-1]
+                # _, y_prev = self.track_history[track_id][-2] if len(self.track_history[track_id]) > 1 else None
+                xy_prev = track[len(track)-2] if len(track)>1 else None
+
+                if xy_prev is not None and track_id not in self.count_ids:
+                    self.count_ids.append(track_id)
+                    save_one_box(xyxy, self.frame.copy(), Path(f"cls/{track_id}.jpg"), BGR=True)
+
+                    if y > xy_prev[1]:
+                        print(f"{track_id} : In @ {time.time()}")
+                    else:
+                        print(f"{track_id} : Out @ {time.time()}")
                     
 
 
 # src = 'rtsp://admin:hik@12345@172.23.16.55'
-src = '3.mp4'
-# src = 'https://isgpopen.ezvizlife.com/v3/openlive/AA4823505_1_1.m3u8?expire=1715948858&id=711298838304219136&c=3cffb6de2e&t=15afff4112c95a983d9538ed19efc996e65feb1751b4b97105863b96bf14dfbc&ev=100'
+src = '1.mp4'
+# src = 'https://isgpopen.ezvizlife.com/v3/openlive/AA4823505_1_1.m3u8?expire=1716039080&id=711677256444084224&c=3cffb6de2e&t=e1498a314974763a69bcfa322cfc66b560034821f1069a0ad4701eb74382c53c&ev=100'
 model = YOLO('yolov8n.pt')
 
 threaded_camera = ThreadedCamera(src)
