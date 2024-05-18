@@ -5,7 +5,7 @@ from ultralytics.utils.plotting import save_one_box
 from pathlib import Path
 from collections import defaultdict
 import numpy as np
-# from deepface import DeepFace
+from deepface import DeepFace
 
 
 class ThreadedCamera(object):
@@ -17,10 +17,10 @@ class ThreadedCamera(object):
         self.new_h = 720
         self.ratio = self.new_h/ self.height
         self.new_w = int(self.width * self.ratio)
-        self.track_history = defaultdict(lambda: [])
+        self.track_history = defaultdict(list)
         self.count_ids = []
-        self.roi1 = 600
-        self.roi2 = 800
+        self.roi1 = 750
+        self.roi2 = 850
 
        
         self.FPS = 1/20
@@ -41,11 +41,11 @@ class ThreadedCamera(object):
         results = model.track(
             self.frame,
             persist=True,
-            # max_det = 10,
-            # classes=[0],
+            max_det = 10,
+            classes=[0],
             show=False,
             conf=0.5,
-            show_labels=False,
+            # show_labels=False,
             verbose=False
         )
 
@@ -59,8 +59,8 @@ class ThreadedCamera(object):
             exit(1)
 
     def snap_on_in(self, results):
-        self.frame = results.plot()
-        cv2.rectangle(self.frame, (0, self.roi1), (self.width, self.roi2), color=(0, 230, 0), thickness=2)
+        # self.frame = results.plot()
+        # cv2.rectangle(self.frame, (0, self.roi1), (self.width, self.roi2), color=(0, 230, 0), thickness=2)
 
         boxes = results.boxes.xywh.cpu()
         xyxys = results.boxes.xyxy.cpu()
@@ -74,8 +74,8 @@ class ThreadedCamera(object):
             if len(track) > 30:  # retain 90 tracks for 90 frames
                 track.pop(0)
 
-            points = np.hstack(track).astype(np.int32).reshape((-1, 1, 2))
-            cv2.polylines(self.frame, [points], isClosed=False, color=(230, 230, 230), thickness=10)
+            # points = np.hstack(track).astype(np.int32).reshape((-1, 1, 2))
+            # cv2.polylines(self.frame, [points], isClosed=False, color=(230, 230, 230), thickness=10)
 
             y_checked = int(y)
             if y_checked in range(self.roi1, self.roi2):
@@ -85,17 +85,38 @@ class ThreadedCamera(object):
 
                 if xy_prev is not None and track_id not in self.count_ids:
                     self.count_ids.append(track_id)
-                    save_one_box(xyxy, self.frame.copy(), Path(f"cls/{track_id}.jpg"), BGR=True)
 
                     if y > xy_prev[1]:
                         print(f"{track_id} : In @ {time.time()}")
+                        pers = save_one_box(
+                            xyxy, 
+                            self.frame.copy(), 
+                            Path(f"cls/{track_id}.jpg"), 
+                            # BGR=False,
+                            # save=False,
+                            )
+                        
+                        # pers_gs = DeepFace.analyze(
+                        #         pers,
+                        #         actions = ['gender'],
+                        #         enforce_detection=False,
+                        #         detector_backend='yolov8',
+                        #         expand_percentage=10,
+                        #         silent=True
+                        #         )
+                        
+                        # if pers_gs:
+                        #     print(pers_gs[0]['dominant_gender'])
+                        # else:
+                        #     print("no face detected")
+
                     else:
                         print(f"{track_id} : Out @ {time.time()}")
                     
 
 
 # src = 'rtsp://admin:hik@12345@172.23.16.55'
-src = '3.mp4'
+src = 'high.mp4'
 # src = 'https://isgpopen.ezvizlife.com/v3/openlive/AA4823505_1_1.m3u8?expire=1716039080&id=711677256444084224&c=3cffb6de2e&t=e1498a314974763a69bcfa322cfc66b560034821f1069a0ad4701eb74382c53c&ev=100'
 model = YOLO('yolov8n.pt')
 

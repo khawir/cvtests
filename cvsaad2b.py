@@ -23,7 +23,7 @@ class ThreadedCamera(object):
         self.roi2 = 400
 
        
-        self.FPS = 1.0/20
+        self.FPS = 1.0/30
         self.FPS_MS = int(self.FPS * 1000)
         
         # Start frame retrieval thread
@@ -95,23 +95,22 @@ class ThreadedCamera(object):
                             # save=False
                             )
                         
-                        pers_gs = DeepFace.analyze(
-                            pers,
-                            actions = ['gender'],
-                            enforce_detection=False,
-                            detector_backend='yolov8',
-                            expand_percentage=25,
-                            # silent=True
-                            )
+                        # pers_gs = DeepFace.analyze(
+                        #     pers,
+                        #     actions = ['gender'],
+                        #     enforce_detection=False,
+                        #     detector_backend='yolov8',
+                        #     expand_percentage=10,
+                        #     # silent=True
+                        #     )
+                        # if pers_gs:
+                        #     for pers_g in pers_gs:
+                        #         print(pers_g['dominant_gender'])
+                        # else:
+                        #     print("no face detected")
                         
                         print(f"{track_id} : In @ {time.time()}")
                         
-                        if pers_gs:
-                            for pers_g in pers_gs:
-                                print(pers_g['dominant_gender'])
-                        else:
-                            print("no face detected")
-
                     else:
                         print(f"{track_id} : Out @ {time.time()}")
                     
