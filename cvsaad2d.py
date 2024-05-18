@@ -101,13 +101,14 @@ class ThreadedCamera(object):
                             # save=False,
                             )
                         
-                        self.detect_gender(pers)                
+                        self.get_gender(pers)
+                        self.get_vector(pers)             
                         
                     else:
                         print(f"{track_id} : Out @ {time.time()}")
 
         
-    def detect_gender(self, pers):
+    def get_gender(self, pers):
         pers_gs = DeepFace.analyze(
             pers,
             actions = ['gender'],
@@ -121,12 +122,26 @@ class ThreadedCamera(object):
             print(f"{pers_gs[0]['dominant_gender']}")
         else:
             print("no face detected")
+
+    def get_vector(self, pers):
+        pers_vs = DeepFace.represent(
+            pers,
+            model_name='Dlib',
+            enforce_detection=False,
+            detector_backend='yolov8',
+            expand_percentage=10,
+        )
+
+        if pers_vs:
+            print(f"{len(pers_vs[0]['embedding'])}")
+        else:
+            print("no face detected")
         
 
 
 # src = 'rtsp://admin:hik@12345@172.23.16.55'
-src = '3.mp4'
-# src = 'https://isgpopen.ezvizlife.com/v3/openlive/AA4823505_1_1.m3u8?expire=1716039080&id=711677256444084224&c=3cffb6de2e&t=e1498a314974763a69bcfa322cfc66b560034821f1069a0ad4701eb74382c53c&ev=100'
+src = '3.mp4'   # 600, 900
+# src = 'https://isgpopen.ezvizlife.com/v3/openlive/AA4823505_1_1.m3u8?expire=1716122383&id=712026655901229056&c=3cffb6de2e&t=87e478fa2d77b5693906d36369f29208475c5a4a1c6882963814f2e066977922&ev=100'
 model = YOLO('yolov8n.pt')
 
 threaded_camera = ThreadedCamera(src)

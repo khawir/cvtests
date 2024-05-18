@@ -1,4 +1,5 @@
-import asyncio
+from datetime import datetime, timedelta
+import json
 from threading import Thread
 import cv2, time
 from ultralytics import YOLO
@@ -10,18 +11,31 @@ from deepface import DeepFace
 
 
 class ThreadedCamera(object):
-    def __init__(self, src=0):
+    def __init__(self, 
+                 site_id, 
+                 src, 
+                 fps=20,
+                 sensitivity=2, 
+                 buffer_size=2, 
+                 disp_height=720, 
+                 roi1=600, 
+                 roi2=900
+                 ):
+        self.site_id = site_id
         self.capture = cv2.VideoCapture(src)
-        self.capture.set(cv2.CAP_PROP_BUFFERSIZE, 2)
+        self.fps = fps
+        self.sensitivity = sensitivity
+        self.capture.set(cv2.CAP_PROP_BUFFERSIZE, buffer_size)
         self.width = int(self.capture.get(cv2.CAP_PROP_FRAME_WIDTH))
         self.height = int(self.capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        self.new_h = 720
+        self.new_h = disp_height
         self.ratio = self.new_h/ self.height
         self.new_w = int(self.width * self.ratio)
         self.track_history = defaultdict(list)
         self.count_ids = []
-        self.roi1 = 600
-        self.roi2 = 900
+        self.visits = []
+        self.roi1 = roi1
+        self.roi2 = roi2
 
        
         self.FPS = 1/20
@@ -89,25 +103,40 @@ class ThreadedCamera(object):
 
                 if xy_prev is not None and track_id not in self.count_ids:
                     self.count_ids.append(track_id)
-                    print(self.count_ids)
 
                     if y > xy_prev[1]:
-                        print(f"{track_id} : In @ {time.time()}")
+                        # print(f"{track_id} : In @ {time.time()}")
+                        guest = {}
+                        guest["ts"] = time.time()
+                        now = datetime.now()
+                        guest["date_in"] = now.strftime("%Y-%m-%d")
+                        guest["time_in"] = now.strftime("%H:%M")
+                        
+                        if self.visits:
+                            diff = abs(guest["ts"] - self.visits[-1]["ts"])
+                            guest["is_group"] = True if diff<self.sensitivity else False
+
                         pers = save_one_box(
                             xyxy, 
                             self.frame.copy(), 
                             Path(f"cls/{track_id}.jpg"), 
                             BGR=True,
-                            # save=False,
+                            save=False,
                             )
                         
-                        self.detect_gender(pers)                
+                        guest["is_female"] = self.get_gender(pers)
+                        # guest["vector"] = self.get_vector(pers)
+                        guest["site_id"] = self.site_id
+                        
+                        self.visits.append(guest)
+                        visit = json.dumps(guest)
+                        print(visit)
                         
                     else:
                         print(f"{track_id} : Out @ {time.time()}")
 
         
-    def detect_gender(self, pers):
+    def get_gender(self, pers):
         pers_gs = DeepFace.analyze(
             pers,
             actions = ['gender'],
@@ -116,20 +145,43 @@ class ThreadedCamera(object):
             expand_percentage=10,
             silent=True
             )
-
+        
         if pers_gs:
-            print(f"{pers_gs[0]['dominant_gender']}")
-        else:
-            print("no face detected")
+            # print(f"{pers_gs[0]['dominant_gender']}")
+            return True if pers_gs[0]['dominant_gender']=="Woman" else False
+        return None
+
+    def get_vector(self, pers):
+        pers_vs = DeepFace.represent(
+            pers,
+            model_name='Dlib',
+            enforce_detection=False,
+            detector_backend='yolov8',
+            expand_percentage=10,
+        )
+
+        if pers_vs:
+            # print(f"{len(pers_vs[0]['embedding'])}")
+            return pers_vs[0]['embedding']
+        return ""
         
 
 
 # src = 'rtsp://admin:hik@12345@172.23.16.55'
-src = '3.mp4'
-# src = 'https://isgpopen.ezvizlife.com/v3/openlive/AA4823505_1_1.m3u8?expire=1716039080&id=711677256444084224&c=3cffb6de2e&t=e1498a314974763a69bcfa322cfc66b560034821f1069a0ad4701eb74382c53c&ev=100'
+src = '3.mp4'   # 600, 900
+# src = 'https://isgpopen.ezvizlife.com/v3/openlive/AA4823505_1_1.m3u8?expire=1716122383&id=712026655901229056&c=3cffb6de2e&t=87e478fa2d77b5693906d36369f29208475c5a4a1c6882963814f2e066977922&ev=100'
 model = YOLO('yolov8n.pt')
 
-threaded_camera = ThreadedCamera(src)
+threaded_camera = ThreadedCamera(
+    site_id=2,
+    src=src,
+    fps=20,
+    sensitivity=2,
+    buffer_size=2,
+    disp_height=720,
+    roi1=600,
+    roi2=900, 
+    )
 while True:
     try:
         threaded_camera.show_frame()

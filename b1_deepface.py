@@ -10,7 +10,7 @@ models = [
   "Facenet", 
   "Facenet512", 
   "OpenFace", 
-  "DeepFace", 
+  # "DeepFace", 
   "DeepID", 
   "ArcFace", 
   "Dlib", 
@@ -102,14 +102,32 @@ actions = ['age', 'gender', 'race', 'emotion']
 # ------------------------
 
 
-for backend in backends:
+# for backend in backends:
+#   tic = time.time()
+#   results = DeepFace.extract_faces(
+#     img_path = "emilia.jpg", 
+#     detector_backend = backend,
+#   )
+#   toc = time.time()
+#   # print(json.dumps(results))
+#   for result in results:
+#     print(result['facial_area'])
+#   print(f"{backend}: {toc-tic} seconds")
+
+
+
+# ----- Model Speed ----
+# ------------------------
+
+
+for model in models:
   tic = time.time()
-  results = DeepFace.extract_faces(
+  results = DeepFace.represent(
     img_path = "emilia.jpg", 
-    detector_backend = backend,
+    model_name= model,
+    detector_backend = 'yolov8',
   )
   toc = time.time()
   # print(json.dumps(results))
-  for result in results:
-    print(result['facial_area'])
-  print(f"{backend}: {toc-tic} seconds")
+  print(len(results[0]['embedding']))
+  print(f"{model}: {toc-tic} seconds")
