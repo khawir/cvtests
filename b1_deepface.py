@@ -120,14 +120,76 @@ actions = ['age', 'gender', 'race', 'emotion']
 # ------------------------
 
 
-for model in models:
-  tic = time.time()
-  results = DeepFace.represent(
-    img_path = "emilia.jpg", 
-    model_name= model,
-    detector_backend = 'yolov8',
-  )
-  toc = time.time()
-  # print(json.dumps(results))
-  print(len(results[0]['embedding']))
-  print(f"{model}: {toc-tic} seconds")
+# for model in models:
+#   tic = time.time()
+#   results = DeepFace.represent(
+#     img_path = "emilia.jpg", 
+#     model_name= model,
+#     detector_backend = 'yolov8',
+#   )
+#   toc = time.time()
+#   # print(json.dumps(results))
+#   print("="*50)
+#   print(results[0]['embedding'])
+#   print(f"{model}: {toc-tic} seconds")
+
+
+
+# ----- Verification Speed ----
+# ------------------------
+
+
+# for model in models:
+#   tic = time.time()
+#   results = DeepFace.verify(
+#     img1_path = "emilia.jpg", 
+#     img2_path = "emilia.png", 
+#     model_name= model,
+#     detector_backend = 'yolov8',
+#   )
+#   toc = time.time()
+#   # print(json.dumps(results))
+#   print(results)
+#   # print(f"{model}: {toc-tic} seconds")
+
+img1 = "brad1.jpg"
+img2 = "brad2.jpg"
+
+results = DeepFace.verify(
+  img1, 
+  img2, 
+  model_name= 'SFace',
+  detector_backend = 'yolov8',
+)
+print(results['distance'])
+
+
+e1 = DeepFace.represent(
+  img1,
+  model_name= 'SFace',
+  detector_backend = 'yolov8',
+)
+
+e2 = DeepFace.represent(
+  img2,
+  model_name= 'SFace',
+  detector_backend = 'yolov8',
+)
+
+v0 = np.array(e1[0]['embedding'])
+v1 = np.array(e2[0]['embedding'])
+
+a = np.matmul(np.transpose(v0), v1)
+b = np.sum(np.multiply(v0, v0))
+c = np.sum(np.multiply(v1, v1))
+dist = 1 - (a / (np.sqrt(b) * np.sqrt(c)))
+print("="*50)
+print(dist)
+
+
+
+
+
+
+
+

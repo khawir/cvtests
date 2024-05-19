@@ -8,6 +8,7 @@ from pathlib import Path
 from collections import defaultdict
 # import numpy as np
 from deepface import DeepFace
+import requests
 
 
 class ThreadedCamera(object):
@@ -19,7 +20,10 @@ class ThreadedCamera(object):
                  buffer_size=2, 
                  disp_height=720, 
                  roi1=600, 
-                 roi2=900
+                 roi2=900,
+                 post_in_ep='http://127.0.0.1:8000/in',
+                 post_out_ep='http://127.0.0.1:8000/out',
+                 token="bearer "
                  ):
         self.site_id = site_id
         self.capture = cv2.VideoCapture(src)
@@ -36,6 +40,9 @@ class ThreadedCamera(object):
         self.visits = []
         self.roi1 = roi1
         self.roi2 = roi2
+        self.post_in_ep = post_in_ep
+        self.post_out_ep = post_out_ep
+        self.token = token
 
        
         self.FPS = 1/20
@@ -103,15 +110,18 @@ class ThreadedCamera(object):
 
                 if xy_prev is not None and track_id not in self.count_ids:
                     self.count_ids.append(track_id)
+                    now = datetime.now()
+                    guest = {}
+                    # print(self.count_ids)
 
                     if y > xy_prev[1]:
-                        # print(f"{track_id} : In @ {time.time()}")
-                        guest = {}
+                        # print(f"{track_id} : In @ {time.time()}")                        
+                        guest["track_id"] = track_id
                         guest["ts"] = time.time()
-                        now = datetime.now()
                         guest["date_in"] = now.strftime("%Y-%m-%d")
                         guest["time_in"] = now.strftime("%H:%M")
-                        
+                        # guest["time_out"] = guest["time_in"]
+
                         if self.visits:
                             diff = abs(guest["ts"] - self.visits[-1]["ts"])
                             guest["is_group"] = True if diff<self.sensitivity else False
@@ -119,57 +129,79 @@ class ThreadedCamera(object):
                         pers = save_one_box(
                             xyxy, 
                             self.frame.copy(), 
-                            Path(f"cls/{track_id}.jpg"), 
+                            # Path(f"cls/{track_id}.jpg"), 
                             BGR=True,
                             save=False,
                             )
                         
                         guest["is_female"] = self.get_gender(pers)
-                        guest["vector"] = self.get_vector(pers)
+                        # guest["vector"] = self.get_vector(pers)
                         guest["site_id"] = self.site_id
+                        guest["is_new"] = True
                         
                         self.visits.append(guest)
                         visit = json.dumps(guest)
                         print(visit)
+                        self.post_visit(visit, self.post_in_ep)
                         
                     else:
-                        print(f"{track_id} : Out @ {time.time()}")
+                        if self.count_ids:
+                            self.count_ids.pop(0)
+                        # guest["track_id"] = track_id
+                        guest["time_out"] = now.strftime("%H:%M")
+                        guest["site_id"] = self.site_id
+                        visit = json.dumps(guest)
+                        self.post_visit(visit, self.post_out_ep)
+                        print(visit)
 
         
+    def post_visit(self, visit, endpoint):
+        response = requests.post(
+            endpoint, 
+            headers={"Authorization": self.token, "Content-Type": "application/json"},
+            data=visit
+            )
+        
+        if response.status_code == 200:
+            print("visit posted")
+            
     def get_gender(self, pers):
         pers_gs = DeepFace.analyze(
             pers,
             actions = ['gender'],
             enforce_detection=False,
             detector_backend='yolov8',
-            expand_percentage=10,
+            # expand_percentage=10,
             silent=True
             )
         
         if pers_gs:
-            # print(f"{pers_gs[0]['dominant_gender']}")
-            return True if pers_gs[0]['dominant_gender']=="Woman" else False
+            return round((pers_gs[0]['gender']['Woman']),1)
+            # return True if pers_gs[0]['gender']['Woman']>20 else False
         return None
 
     def get_vector(self, pers):
         pers_vs = DeepFace.represent(
             pers,
-            model_name='Dlib',
+            model_name='SFace',
             enforce_detection=False,
             detector_backend='yolov8',
-            expand_percentage=10,
+            # expand_percentage=10,
         )
 
         if pers_vs:
             # print(f"{len(pers_vs[0]['embedding'])}")
             return pers_vs[0]['embedding']
         return ""
-        
+    
+            
 
 
 # src = 'rtsp://admin:hik@12345@172.23.16.55'
-src = '1.mp4'
-# src = '3.mp4'   # 600, 900
+# src = 'https://drive.google.com/file/d/14fTYfXCMoodYjW62k5rVA6Vaugc31MQ8/view?usp=drive_link'
+# src = 'http://127.0.0.1:8080'
+
+src = '3.mp4'   # 800, 900
 # src = 'high.mp4'   # 800, 900
 # 650, 900
 # src = 'https://isgpopen.ezvizlife.com/v3/openlive/AA4823505_1_1.m3u8?expire=1716122383&id=712026655901229056&c=3cffb6de2e&t=87e478fa2d77b5693906d36369f29208475c5a4a1c6882963814f2e066977922&ev=100'
@@ -183,7 +215,10 @@ threaded_camera = ThreadedCamera(
     buffer_size=2,
     disp_height=720,
     roi1=600,
-    roi2=900, 
+    roi2=900,
+    post_in_ep='http://127.0.0.1:8000/in',
+    post_out_ep="http://127.0.0.1:8000/out",
+    token="bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJraGF3aXIiLCJpc19zdXBlcnVzZXIiOnRydWUsImV4cCI6MTcxNjI3MDc1OH0.bOUI0OOjjDG23_XmR3KbEngtj3f0gQXoqyAxOUHdQLQ"
     )
 while True:
     try:
