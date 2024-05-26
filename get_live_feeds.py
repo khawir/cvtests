@@ -33,7 +33,10 @@ accessToken = get_key()
 print(f"{accessToken=}")
 
 url1 = get_feed_url(accessToken, "AB9438217")
-print(f"{url1=}")
+print(url1)
 
 url2 = get_feed_url(accessToken, "AA4823505")
-print(f"{url2=}")
+print(url2)
+
+url3 = get_feed_url(accessToken, "K57001616")
+print(url3)

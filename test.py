@@ -1,21 +1,89 @@
+#!/usr/bin/env python
+'''
+mouse_and_match.py [-i path | --input path: default ../data/]
+
+Demonstrate using a mouse to interact with an image:
+ Read in the images in a directory one by one
+ Allow the user to select parts of an image with a mouse
+ When they let go of the mouse, it correlates (using matchTemplate) that patch with the image.
+
+ SPACE for next image
+ ESC to exit
+'''
+
+# Python 2/3 compatibility
+from __future__ import print_function
+
+import numpy as np
+import cv2 as cv
+
+# built-in modules
+import os
+import sys
+import glob
+import argparse
+from math import *
 
 
+class App():
+    drag_start = None
+    sel = (0,0,0,0)
+
+    def onmouse(self, event, x, y, flags, param):
+        if event == cv.EVENT_LBUTTONDOWN:
+            print(f"{x}, {y}")
+            self.drag_start = x, y
+            self.sel = (0,0,0,0)
+        elif event == cv.EVENT_LBUTTONUP:
+            if self.sel[2] > self.sel[0] and self.sel[3] > self.sel[1]:
+                patch = self.gray[self.sel[1]:self.sel[3], self.sel[0]:self.sel[2]]
+                result = cv.matchTemplate(self.gray, patch, cv.TM_CCOEFF_NORMED)
+                result = np.abs(result)**3
+                _val, result = cv.threshold(result, 0.01, 0, cv.THRESH_TOZERO)
+                result8 = cv.normalize(result, None, 0, 255, cv.NORM_MINMAX, cv.CV_8U)
+                cv.imshow("result", result8)
+            self.drag_start = None
+        elif self.drag_start:
+            #print flags
+            if flags & cv.EVENT_FLAG_LBUTTON:
+                minpos = min(self.drag_start[0], x), min(self.drag_start[1], y)
+                maxpos = max(self.drag_start[0], x), max(self.drag_start[1], y)
+                self.sel = (minpos[0], minpos[1], maxpos[0], maxpos[1])
+                img = cv.cvtColor(self.gray, cv.COLOR_GRAY2BGR)
+                cv.rectangle(img, (self.sel[0], self.sel[1]), (self.sel[2], self.sel[3]), (0,255,255), 1)
+                cv.imshow("gray", img)
+            else:
+                print("selection is complete")
+                self.drag_start = None
+
+    def run(self):
+        parser = argparse.ArgumentParser(description='Demonstrate mouse interaction with images')
+        parser.add_argument("-i","--input", default='../data/', help="Input directory.")
+        args = parser.parse_args()
+        path = args.input
+
+        cv.namedWindow("gray",1)
+        cv.setMouseCallback("gray", self.onmouse)
+        '''Loop through all the images in the directory'''
+        for infile in glob.glob( os.path.join(path, '*.*') ):
+            ext = os.path.splitext(infile)[1][1:] #get the filename extension
+            if ext == "png" or ext == "jpg" or ext == "bmp" or ext == "tiff" or ext == "pbm":
+                print(infile)
+
+                img = cv.imread(infile, cv.IMREAD_COLOR)
+                if img is None:
+                    continue
+                self.sel = (0,0,0,0)
+                self.drag_start = None
+                self.gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+                cv.imshow("gray", self.gray)
+                if cv.waitKey() == 27:
+                    break
+
+        print('Done')
 
 
-# vector = [-0.0911170095205307, 0.06391473859548569, 0.05911039561033249, -0.05553238093852997, -0.12297584116458893, -0.0742187574505806, -0.02506304159760475, -0.1563825011253357, 0.01793963462114334, -0.0941542536020279, 0.22142009437084198, -0.061814986169338226, -0.27076101303100586, 0.012539681047201157, -0.04511582478880882, 0.08493050932884216, -0.09991040080785751, -0.11721640080213547, -0.16890524327754974, -0.023816604167222977, -0.04214067757129669, 0.05610201507806778, -0.03421835973858833, 0.0530221201479435, -0.10211309790611267, -0.24220159649848938, -0.10096931457519531, -0.09409235417842865, 0.01738819107413292, -0.06307382881641388, -0.011032131500542164, 0.09742265194654465, -0.14104051887989044, -0.0038104746490716934, 0.03855939954519272, -0.026980385184288025, -0.1019333228468895, -0.07350068539381027, 0.2476990520954132, 0.00790571328252554, -0.1998976618051529, -0.07365163415670395, 0.0881187841296196, 0.2602103650569916, 0.2123727649450302, -0.026055172085762024, 0.012653296813368797, -0.04510979354381561, 0.08481542021036148, -0.30687135457992554, 0.05081329867243767, 0.14878767728805542, 0.07776321470737457, 0.16327129304409027, 0.033844243735075, -0.17401137948036194, 
-# 0.04131016135215759, 0.13845933973789215, -0.17758220434188843, 0.06935306638479233, 0.07666376233100891, -0.16160772740840912, -0.07932772487401962, -0.06811250001192093, 0.23474130034446716, 0.1189592033624649, -0.11012061685323715, -0.12175099551677704, 0.2029409408569336, -0.21291583776474, -0.06078791618347168, 0.09006015956401825, -0.12268248945474625, -0.1813887059688568, -0.20746034383773804, 0.09194766730070114, 0.36800432205200195, 0.23014594614505768, -0.12221867591142654, 0.03034260682761669, -0.048139944672584534, -0.044539742171764374, 0.07400842010974884, 0.045461785048246384, -0.06845775246620178, -0.0451173260807991, 0.006787959951907396, 0.04307146370410919, 0.2179780751466751, -0.04171314090490341, 0.01107797585427761, 0.261659175157547, 0.015059726312756538, -0.021439414471387863, 0.07763217389583588, -0.03300134837627411, -0.0019169431179761887, -0.0446271076798439, -0.08390998095273972, 0.09480827301740646, 0.017672043293714523, -0.13089080154895782, 0.057474471628665924, 0.10392992198467255, -0.10822757333517075, 0.1501922607421875, -0.008673297241330147, -0.002976054325699806, 0.023193946108222008, -0.029388759285211563, -0.06552038341760635, -0.08731797337532043, 0.15432503819465637, -0.24037523567676544, 0.21784237027168274, 0.1145644262433052, 0.06611140817403793, 0.10565965622663498, 0.039597056806087494, 0.09453968703746796, 0.014812826178967953, -0.021597525104880333, -0.14584553241729736, -0.06065382808446884, 0.16038785874843597, -0.02938132733106613, 0.0056235697120428085, 0.005019176751375198]
-
-
-# print(sum(vector))
-
-
-# s_vector = ",".join(str(x) for x in vector)
-
-# print(f"{len(s_vector)}")
-
-# db_vector = [float(x) for x in s_vector.split(",")]
-
-# print(f"{sum(db_vector)}")
-
-
-print("="*20)
+if __name__ == '__main__':
+    print(__doc__)
+    App().run()
+    cv.destroyAllWindows()

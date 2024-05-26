@@ -71,15 +71,14 @@ def get_vector(pers):
 
 
 
-def snap_on_in(result):
-    frame = result.plot()
-    cv2.rectangle(frame, (0, roi1), (2560, roi2), color=(0, 230, 0), thickness=2)
+def snap_on_in(results, frame):
+    cv2.rectangle(frame, (0, roi1), (results.orig_shape[1], roi2), color=(0, 230, 0), thickness=2)
 
-    boxes = result.boxes.xywh.cpu()
-    xyxys = result.boxes.xyxy.cpu()
-    if result.boxes.id is None:
+    boxes = results.boxes.xywh.cpu()
+    xyxys = results.boxes.xyxy.cpu()
+    if results.boxes.id is None:
         return
-    track_ids = result.boxes.id.int().cpu().tolist()
+    track_ids = results.boxes.id.int().cpu().tolist()
 
     for box, track_id, xyxy in zip(boxes, track_ids, xyxys):
         x, y, _, _ = box
@@ -89,62 +88,53 @@ def snap_on_in(result):
         if len(track_line) > 30:  # retain 90 tracks for 90 frames
             track_line.pop(0)
 
-        points = np.hstack(track).astype(np.int32).reshape((-1, 1, 2))
-        cv2.polylines(self.frame, [points], isClosed=False, color=(230, 230, 230), thickness=10)
+        points = np.hstack(track_line).astype(np.int32).reshape((-1, 1, 2))
+        cv2.polylines(frame, [points], isClosed=False, color=(230, 230, 230), thickness=10)
 
         y_checked = int(y)
         if y_checked in range(roi1, roi2):
-            # _, y_prev = track[len(track)-1] if len(track)>1 else None
-            _, y_prev = track_history[track_id][-2] if len(track_history[track_id]) > 1 else None
-            # _, y_prev = track[len(track)-2] if len(track) > 1 else None
+            xy_prev = track_history[track_id][-2] if len(track_history[track_id]) > 1 else None
 
-            if y_prev is not None and track_id not in count_ids:
+            if xy_prev is not None and track_id not in count_ids:
                 count_ids.append(track_id)
+                print(count_ids)
                 now = datetime.now()
-                guest = {}
-                # print(self.count_ids)
+                visit = {}
 
-                print(f"{y} : {y_prev}")
-
-                if y_checked > int(y_prev):
-                    # print(f"{track_id} : In @ {time.time()}")                        
-                    guest["track_id"] = track_id
-                    guest["ts"] = time.time()
-                    guest["date_in"] = now.strftime("%Y-%m-%d")
-                    guest["time_in"] = now.strftime("%H:%M")
-                    # guest["time_out"] = guest["time_in"]
+                if y > xy_prev[1]:
+                    visit["site_id"] = site_id
+                    visit["ts"] = time.time()
+                    visit["date_in"] = now.strftime("%Y-%m-%d")
+                    visit["time_in"] = now.strftime("%H:%M")
 
                     if visits:
-                        diff = abs(guest["ts"] - visits[-1]["ts"])
-                        guest["is_group"] = True if diff<sensitivity else False
+                        diff = abs(visit["ts"] - visits[-1]["ts"])
+                        visit["is_group"] = True if diff<sensitivity else False
 
                     pers = save_one_box(
                         xyxy, 
-                        frame.copy(), 
+                        results.orig_img.copy(), 
                         # Path(f"cls/{track_id}.jpg"), 
                         BGR=True,
                         save=False,
-                        )
+                        )                    
+                    visit["is_female"] = get_gender(pers)
                     
-                    guest["is_female"] = get_gender(pers)
-                    # guest["vector"] = get_vector(pers)
-                    guest["site_id"] = site_id
-                    guest["is_new"] = True
+                    visits.append(visit)
+                    jvisit = json.dumps(visit)
+                    print(jvisit)
+                    # visit["vector"] = get_vector(pers)
+                    # post_visit(jvisit, post_in_ep)
                     
-                    visits.append(guest)
-                    visit = json.dumps(guest)
-                    print(visit)
-                    # post_visit(visit, post_in_ep)
-                    
-                elif y_checked < int(y_prev):
+                elif y < xy_prev[1]:
                     if count_ids:
                         count_ids.pop(0)
                     # guest["track_id"] = track_id
-                    guest["time_out"] = now.strftime("%H:%M")
-                    guest["site_id"] = site_id
-                    visit = json.dumps(guest)
-                    # self.visit(visit, post_out_ep)
-                    print(visit)
+                    visit["time_out"] = now.strftime("%H:%M")
+                    visit["site_id"] = site_id
+                    jvisit = json.dumps(visit)
+                    print(jvisit)
+                    # self.visit(jvisit, post_out_ep)
 
 
 while True:
@@ -158,11 +148,12 @@ while True:
             # stream_buffer=True,
             classes=[0],
             # show=True,
+            line_width=1,
             verbose=False
         ):
             frame = result.plot()
             if(result.boxes):
-                snap_on_in(result)
+                snap_on_in(result, frame)
             else:
                 pass
 
