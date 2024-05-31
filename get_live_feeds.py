@@ -12,7 +12,7 @@ def get_key():
     else:
         return ""
     
-def get_feed_url(accessToken, deviceSerial, code=654321, expireTime=90000, channelNo=1, protocol=2):
+def get_feed_url(accessToken, deviceSerial, code=654321, expireTime=90000, channelNo=1, protocol=3):
     response = requests.post('https://isgpopen.ezvizlife.com/api/lapp/live/address/get', 
                              headers={"Content-Type": "application/x-www-form-urlencoded"},
                              data={"accessToken": accessToken,
