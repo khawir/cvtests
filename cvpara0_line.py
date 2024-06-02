@@ -13,7 +13,13 @@ from shapely.geometry import LineString, Point
 
 
 class Tracker:
-    def __init__(self, site_id, roi1=600, roi2=900, reg_pts=None, sensitivity=2):
+    def __init__(self, 
+                 site_id, 
+                 roi1=400, 
+                 roi2=580, 
+                 reg_pts=None, 
+                 sensitivity=2
+                 ):
         self.site_id = site_id
 
         self.sensitivity = sensitivity
@@ -25,7 +31,10 @@ class Tracker:
         self.roi1 = roi1
         self.roi2 = roi2
         self.line_dist_thresh = 15
-        self.reg_pts = [(10, 650), (2000, 800)] if reg_pts is None else reg_pts
+        # self.reg_pts = [(1740, 460), (2520, 520)] if reg_pts is None else reg_pts
+        # self.reg_pts = [(870, 220), (1270, 260)]
+        self.reg_pts = [(10, 650), (2000, 800)]
+
         self.counting_region = LineString(self.reg_pts)
 
     def snap_on_in(self, results, frame):
@@ -49,50 +58,50 @@ class Tracker:
             cv2.polylines(frame, [points], isClosed=False, color=(230, 230, 230), thickness=10)
 
             
-            y_checked = int(y)
-            if y_checked in range(self.roi1, self.roi2):
+            # y_checked = int(y)
+            # if y_checked in range(self.roi1, self.roi2):
 
-                prev_position = self.track_history[track_id][-2] if len(self.track_history[track_id]) > 1 else None
+            prev_position = self.track_history[track_id][-2] if len(self.track_history[track_id]) > 1 else None
 
-                if prev_position is not None and track_id not in self.count_ids:
-                    distance = Point(track_line[-1]).distance(self.counting_region)
-                    if distance < self.line_dist_thresh and track_id not in self.count_ids:
-                        self.count_ids.append(track_id)
-                        # print(self.count_ids)
+            if prev_position is not None and track_id not in self.count_ids:
+                distance = Point(track_line[-1]).distance(self.counting_region)
+                if distance < self.line_dist_thresh and track_id not in self.count_ids:
+                    self.count_ids.append(track_id)
+                    # print(self.count_ids)
 
-                        now = datetime.now()
-                        visit = {}
+                    now = datetime.now()
+                    visit = {}
 
-                        if (box[0] - prev_position[0]) * (self.counting_region.centroid.x - prev_position[0]) > 0:
-                            visit["site_id"] = self.site_id
-                            visit["ts"] = time.time()
-                            visit["date_in"] = now.strftime("%Y-%m-%d")
-                            visit["time_in"] = now.strftime("%H:%M")
+                    if (box[1] - prev_position[1]) * (self.counting_region.centroid.y - prev_position[1]) > 0:
+                        visit["site_id"] = self.site_id
+                        visit["ts"] = time.time()
+                        visit["date_in"] = now.strftime("%Y-%m-%d")
+                        visit["time_in"] = now.strftime("%H:%M")
 
-                            if self.visits:
-                                diff = abs(visit["ts"] - self.visits[-1]["ts"])
-                                visit["is_group"] = True if diff<self.sensitivity else False
+                        if self.visits:
+                            diff = abs(visit["ts"] - self.visits[-1]["ts"])
+                            visit["is_group"] = True if diff<self.sensitivity else False
 
-                            pers = save_one_box(
-                                xyxy, 
-                                results.orig_img.copy(),
-                                # Path(f"cls/{track_id}.jpg"), 
-                                BGR=True,
-                                save=False,
-                                )                        
-                            visit["is_female"] = self.get_gender(pers)
+                        pers = save_one_box(
+                            xyxy, 
+                            results.orig_img.copy(),
+                            # Path(f"cls/{track_id}.jpg"), 
+                            BGR=True,
+                            save=False,
+                            )                        
+                        visit["is_female"] = self.get_gender(pers)
 
-                            self.visits.append(visit)
-                            jvisit = json.dumps(visit)
-                            print(jvisit)                    
+                        self.visits.append(visit)
+                        jvisit = json.dumps(visit)
+                        print(jvisit)                    
 
-                        else:
-                            if self.count_ids:
-                                self.count_ids.pop(0)
-                            visit["site_id"] = site_id                       
-                            visit["time_out"] = now.strftime("%H:%M")
-                            jvisit = json.dumps(visit)
-                            print(jvisit)
+                    else:
+                        if self.count_ids:
+                            self.count_ids.pop(0)
+                        visit["site_id"] = site_id                       
+                        visit["time_out"] = now.strftime("%H:%M")
+                        jvisit = json.dumps(visit)
+                        print(jvisit)
 
 
     def get_gender(self, pers):
@@ -149,13 +158,14 @@ def run_tracker_in_thread_v1(src: str, model: str, site_id: int, tracker: Tracke
                 else:
                     pass
                 
-                r_frame = cv2.resize(frame, (680, 420))
+                r_frame = cv2.resize(frame, (1280, 720))
                 cv2.imshow(f'Tracking_Stream {site_id}', r_frame)
                 
                 tracker.frame_buffer.append(r_frame)
                 if cv2.waitKey(1) == ord('q'):
                     break
-
+                
+                time.sleep(1/20)
         except Exception as e:
             print("Error:", e)
             print("Attempting to reconnect...")
@@ -169,6 +179,7 @@ def run_tracker_in_thread_v1(src: str, model: str, site_id: int, tracker: Tracke
 
 
 src = 'http://127.0.0.1:8080'
+# src = 'https://isgpopen.ezvizlife.com/v3/openlive/K57001616_1_1.m3u8?expire=1716810444&id=714912594421448704&c=9ada396462&t=0e4732c70269f1270d1600840526e4a160544ac46810df685d2176a213279b29&ev=100'
 model = YOLO('yolov8n.pt')
 site_id = 2
 
