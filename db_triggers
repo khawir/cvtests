@@ -1,0 +1,77 @@
+-- FUNCTION: public.notify_new_row()
+
+-- DROP FUNCTION IF EXISTS public.notify_new_row();
+
+CREATE OR REPLACE FUNCTION public.notify_new_row()
+    RETURNS trigger
+    LANGUAGE 'plpgsql'
+    COST 100
+    VOLATILE NOT LEAKPROOF
+AS $BODY$
+BEGIN
+ -- Serialize the entire NEW row into a JSON string
+ PERFORM pg_notify('new_row', row_to_json(NEW)::text);
+ RETURN NEW;
+END;
+$BODY$;
+
+ALTER FUNCTION public.notify_new_row()
+    OWNER TO postgres;
+
+
+-- Trigger: new_row_trigger
+
+-- DROP TRIGGER IF EXISTS new_row_trigger ON public.visit;
+
+CREATE OR REPLACE TRIGGER new_row_trigger
+    AFTER INSERT
+    ON public.visit
+    FOR EACH ROW
+    EXECUTE FUNCTION public.notify_new_row();
+
+
+
+
+
+
+
+
+
+
+
+-- FUNCTION: public.notify_time_out_update()
+
+-- DROP FUNCTION IF EXISTS public.notify_time_out_update();
+
+CREATE OR REPLACE FUNCTION public.notify_time_out_update()
+    RETURNS trigger
+    LANGUAGE 'plpgsql'
+    COST 100
+    VOLATILE NOT LEAKPROOF
+AS $BODY$
+BEGIN
+  -- Check if the 'time_out' column has changed
+  IF NEW.time_out IS DISTINCT FROM OLD.time_out THEN
+    -- Serialize the NEW row into a JSON string and send a notification
+    PERFORM pg_notify('time_out_update', row_to_json(NEW)::text);
+  END IF;
+  RETURN NEW;
+END;
+$BODY$;
+
+ALTER FUNCTION public.notify_time_out_update()
+    OWNER TO postgres;
+
+
+
+
+-- Trigger: time_out_update_trigger
+
+-- DROP TRIGGER IF EXISTS time_out_update_trigger ON public.visit;
+
+CREATE OR REPLACE TRIGGER time_out_update_trigger
+    AFTER UPDATE 
+    ON public.visit
+    FOR EACH ROW
+    WHEN (old.time_out IS DISTINCT FROM new.time_out)
+    EXECUTE FUNCTION public.notify_time_out_update();

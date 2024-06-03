@@ -30,10 +30,13 @@ class Tracker:
 
         # self.roi1 = roi1
         # self.roi2 = roi2
-        self.line_dist_thresh = 15
+        self.line_dist_thresh = 10
         # self.reg_pts = [(870, 240), (1270, 240), (1260, 300), (870, 300)] if reg_pts is None else reg_pts
-        self.reg_pts = [(870, 300), (1260, 300), (1270, 240), (870, 240)]
-        self.counting_region = Polygon(self.reg_pts)
+        # self.reg_pts = [(870, 300), (1260, 300), (1270, 240), (870, 240)]
+        # self.reg_pts = [(1370, 220), (1700, 250), (1690, 290), (1580, 340), (1290, 320)] if reg_pts is None else reg_pts
+        self.reg_pts = [(1350, 240), (1700, 210)]
+        # self.counting_region = Polygon(self.reg_pts)
+        self.counting_region = LineString(self.reg_pts)
 
     def snap_on_in(self, results, frame):
         cv2.polylines(frame, [np.array(self.reg_pts, dtype=np.int32)], isClosed=True, color=(0, 230, 0), thickness=2)
@@ -57,44 +60,51 @@ class Tracker:
 
             
             prev_position = self.track_history[track_id][-2] if len(self.track_history[track_id]) > 1 else None
+            mov = [c[1] for c in track_line]
+            dir = y - np.mean(mov)
 
             is_inside = self.counting_region.contains(Point(track_line[-1]))
 
-            if prev_position is not None and is_inside and track_id not in self.count_ids:
-                self.count_ids.append(track_id)
-                now = datetime.now()
-                visit = {}
+            # if prev_position is not None and is_inside and track_id not in self.count_ids:
+            if prev_position is not None and track_id not in self.count_ids:
+                distance = Point(track_line[-1]).distance(self.counting_region)
+                if distance < self.line_dist_thresh and track_id not in self.count_ids:
+                    print(f"{track_id} {'in' if dir>0 else 'out'}")
+                    self.count_ids.append(track_id)
+                    now = datetime.now()
+                    visit = {}
 
-                if (box[0] - prev_position[0]) * (self.counting_region.centroid.x - prev_position[0]) < 0:
-                    visit["site_id"] = self.site_id
-                    visit["ts"] = time.time()
-                    visit["date_in"] = now.strftime("%Y-%m-%d")
-                    visit["time_in"] = now.strftime("%H:%M")
+                    # if (box[0] - prev_position[0]) * (self.counting_region.centroid.x - prev_position[0]) < 0:
+                    if dir > 0:
+                        visit["site_id"] = self.site_id
+                        visit["ts"] = time.time()
+                        visit["date_in"] = now.strftime("%Y-%m-%d")
+                        visit["time_in"] = now.strftime("%H:%M")
 
-                    if self.visits:
-                        diff = abs(visit["ts"] - self.visits[-1]["ts"])
-                        visit["is_group"] = True if diff<self.sensitivity else False
+                        if self.visits:
+                            diff = abs(visit["ts"] - self.visits[-1]["ts"])
+                            visit["is_group"] = True if diff<self.sensitivity else False
 
-                    pers = save_one_box(
-                        xyxy, 
-                        results.orig_img.copy(),
-                        # Path(f"cls/{track_id}.jpg"), 
-                        BGR=True,
-                        save=False,
-                        )                        
-                    visit["is_female"] = self.get_gender(pers)
+                        pers = save_one_box(
+                            xyxy, 
+                            results.orig_img.copy(),
+                            # Path(f"cls/{track_id}.jpg"), 
+                            BGR=True,
+                            save=False,
+                            )                        
+                        # visit["is_female"] = self.get_gender(pers)
 
-                    self.visits.append(visit)
-                    jvisit = json.dumps(visit)
-                    print(jvisit)
+                        self.visits.append(visit)
+                        jvisit = json.dumps(visit)
+                        print(jvisit)
 
-                else:
-                    if self.count_ids:
-                        self.count_ids.pop(0)
-                    visit["site_id"] = site_id                       
-                    visit["time_out"] = now.strftime("%H:%M")
-                    jvisit = json.dumps(visit)
-                    print(jvisit)
+                    elif dir < 0:
+                        if self.count_ids:
+                            self.count_ids.pop(0)
+                        visit["site_id"] = site_id                       
+                        visit["time_out"] = now.strftime("%H:%M")
+                        jvisit = json.dumps(visit)
+                        print(jvisit)
             
 
 
