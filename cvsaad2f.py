@@ -2,7 +2,7 @@ from datetime import datetime
 import json
 from threading import Thread
 import cv2, time
-from ultralytics import YOLO
+from ultralytics import YOLO, solutions
 from ultralytics.utils.plotting import save_one_box
 from pathlib import Path
 from collections import defaultdict
@@ -52,6 +52,7 @@ class ThreadedCamera(object):
         self.thread = Thread(target=self.update, args=())
         self.thread.daemon = True
         self.thread.start()
+        
 
     def update(self):
         while True:
@@ -60,6 +61,15 @@ class ThreadedCamera(object):
             time.sleep(self.FPS)
 
     def show_frame(self):
+
+        heatmap_obj = solutions.Heatmap(
+            colormap=cv2.COLORMAP_PARULA,
+            view_img=True,
+            shape="circle",
+            classes_names=model.names
+        )
+
+
         results = model.track(
             self.frame,
             persist=True,
